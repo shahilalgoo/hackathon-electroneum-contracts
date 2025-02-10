@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-contract GamePool  is Ownable, ReentrancyGuard {
+contract GamePool is Ownable, ReentrancyGuard {
     /**
      * ERRORS
      */
@@ -36,7 +36,12 @@ contract GamePool  is Ownable, ReentrancyGuard {
      */
     event TicketBought(address indexed participant);
 
-    constructor() Ownable() {}
+    constructor(bool canBuyTicket_, uint256 ticketPrice_, uint256 enrollStartTime_, uint256 playEndTime_) Ownable() {
+        _canBuyTicket = canBuyTicket_;
+        i_ticketPrice = ticketPrice_;
+        i_enrollStartTime = enrollStartTime_;
+        i_playEndTime = playEndTime_;
+    }
 
     modifier enrollPhase() {
         // Check if within enrollment/playtime
