@@ -98,6 +98,8 @@ contract GamePool is Ownable, ReentrancyGuard {
 
         _canBuyTicket = canBuyTicket_;
         i_ticketPrice = ticketPrice_;
+        i_withdrawAddress = withdrawAddress_;
+        i_commissionPercentage = commissionPercentage_;
 
         // Enroll start time cannot be less than now
         i_enrollStartTime = enrollStartTime_ < block.timestamp ? block.timestamp : enrollStartTime_;
