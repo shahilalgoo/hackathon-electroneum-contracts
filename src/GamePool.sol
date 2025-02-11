@@ -28,6 +28,9 @@ contract GamePool is Ownable, ReentrancyGuard {
     error UserAlreadyClaimed(address user);
     error PrizeTransferFailed(address recipient);
 
+    // Merkle Root Errors
+    error MerkleRootCannotBeZero();
+
     
     // Unclaimed Withdrawal Errors
     error UnclaimedPrizesTransferFailed();
@@ -61,6 +64,7 @@ contract GamePool is Ownable, ReentrancyGuard {
     event TicketBought(address indexed participant);
     event PrizeClaimed(address indexed participant, uint256 amount);
     event UnclaimedPrizesWithdrawn(uint256 amount);
+    event MerkleRootSet(bytes32 merkleRoot);
 
 
     constructor(
@@ -99,6 +103,19 @@ contract GamePool is Ownable, ReentrancyGuard {
     modifier claimPhase() {
         if (block.timestamp > i_claimExpiryTime) revert ClaimPhaseOver();
         _;
+    }
+
+
+    function setPrizeMerkleRoot(bytes32 merkleRoot) public virtual onlyOwner claimPhase afterPlaytimePhase {
+        // merkle root cannot be zero
+        if (merkleRoot == bytes32(0)) revert MerkleRootCannotBeZero();
+
+        // Disable ticket buying bool
+        _canBuyTicket = false;
+
+        _prizeMerkleRoot = merkleRoot;
+
+        emit MerkleRootSet(merkleRoot);
     }
 
     function buyTicket() external payable enrollPhase nonReentrant {
