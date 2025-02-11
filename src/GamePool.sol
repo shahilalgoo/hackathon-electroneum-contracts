@@ -11,6 +11,8 @@ contract GamePool is Ownable, ReentrancyGuard {
      */
     // Constructor Errors
     error WithdrawAddressCannotBeZeroAddress();
+    error CommissionPercentageTooHigh();
+    error TicketPriceCannotBeZero();
 
     // Modifier Errors
     error EnrollmentPhaseInactive();
@@ -31,29 +33,38 @@ contract GamePool is Ownable, ReentrancyGuard {
     // Merkle Root Errors
     error MerkleRootCannotBeZero();
 
+    // Commission Errors
+    error NoCommissionToClaim();
+    error CommissionAlreadyClaimed();
+    error CommissionTransferFailed();
     
     // Unclaimed Withdrawal Errors
     error UnclaimedPrizesTransferFailed();
     error ClaimExpiryTimeNotReached();
     error NoUnclaimedPrizes();
 
+
     /**
      * CONSTANTS/IMMUTABLES
      */
+    uint8 private constant MAX_OWNER_COMMISSION_PERCENTAGE = 15;
     uint256 private constant CLAIM_EXPIRY_TIME = 30 days;
     uint256 private immutable i_enrollStartTime;
     uint256 private immutable i_playEndTime;
     uint256 private immutable i_claimExpiryTime;
     uint256 private immutable i_ticketPrice;
+    uint8 private immutable i_commissionPercentage;
     address payable immutable i_withdrawAddress;
 
     /**
      * STATE VARIABLES
      */
     bool private _canBuyTicket;
+    bool private _commissionClaimed;
     uint32 private _uniqueParticipants;
     bytes32 private _prizeMerkleRoot;
     uint32 private _prizeClaimCount;
+    uint256 private _balanceAfterPlaytime;
 
     mapping(address => bool) private _participantRecorded;
     mapping(address => bool) private _prizeClaims;
@@ -65,15 +76,23 @@ contract GamePool is Ownable, ReentrancyGuard {
     event PrizeClaimed(address indexed participant, uint256 amount);
     event UnclaimedPrizesWithdrawn(uint256 amount);
     event MerkleRootSet(bytes32 merkleRoot);
+    event OwnerCommissionClaimed(address indexed to, uint256 amount);
 
 
     constructor(
         bool canBuyTicket_, 
         uint256 ticketPrice_,
+        uint8 commissionPercentage_,
         address payable withdrawAddress_,
         uint256 enrollStartTime_, 
         uint256 playEndTime_) 
         Ownable() {
+        // Commission cannot be higher than 15%
+        if (commissionPercentage_ > MAX_OWNER_COMMISSION_PERCENTAGE) revert CommissionPercentageTooHigh();
+
+        // Ticket price cannot be zero
+        if (ticketPrice_ == 0) revert TicketPriceCannotBeZero(); 
+
         // Withdraw address cannot be zero address
         if (withdrawAddress_ == address(0)) revert WithdrawAddressCannotBeZeroAddress();
 
@@ -112,6 +131,9 @@ contract GamePool is Ownable, ReentrancyGuard {
 
         // Disable ticket buying bool
         _canBuyTicket = false;
+
+        // Record balance after playtime, so we can calculate commission
+        _balanceAfterPlaytime = address(this).balance;
 
         _prizeMerkleRoot = merkleRoot;
 
@@ -161,6 +183,25 @@ contract GamePool is Ownable, ReentrancyGuard {
         // Send prize
         (bool success,) = payable(msg.sender).call{value: amount}("");
         if (!success) revert PrizeTransferFailed(msg.sender);
+    }
+
+    function claimOwnerCommission() external virtual onlyOwner afterPlaytimePhase {
+        // Make owner claim only after the prize structure is in place
+        if (_prizeMerkleRoot == bytes32(0)) revert PrizeStructureNotSet();
+
+        // Check if already claimed
+        if (_commissionClaimed) revert CommissionAlreadyClaimed();
+
+        // Check commission amount
+        uint256 commissionAmount = getCurrentCommission();
+        if (commissionAmount == 0) revert NoCommissionToClaim();
+
+        _commissionClaimed = true;
+
+        emit OwnerCommissionClaimed(i_withdrawAddress, commissionAmount);
+
+       (bool success,) = i_withdrawAddress.call{value: commissionAmount}("");
+        if (!success) revert CommissionTransferFailed();
     }
 
 
@@ -231,5 +272,17 @@ contract GamePool is Ownable, ReentrancyGuard {
 
     function getUserPrizeClaim(address user) public view returns (bool) {
         return _prizeClaims[user];
+    }
+
+    function getCurrentCommission() public view returns (uint256) {
+        if (_prizeMerkleRoot == bytes32(0)) {
+            return i_commissionPercentage * address(this).balance / 100;
+        } else {
+            return i_commissionPercentage * _balanceAfterPlaytime / 100;
+        }
+    }
+
+    function getCommissionClaimed() public view returns (bool) {
+        return _commissionClaimed;
     }
 }
