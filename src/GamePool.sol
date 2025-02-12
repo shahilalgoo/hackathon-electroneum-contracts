@@ -154,7 +154,7 @@ contract GamePool is Ownable, ReentrancyGuard {
     function enableBuyTicket(bool value) external onlyOwner enrollPhase {
         // Check refund state
         if (value == true && _refundActivated) revert RefundInPlace();
-        
+
         // Check merkle root is not set
         if (value == true && _prizeMerkleRoot != bytes32(0)) revert PrizeStructureInPlace();
 
@@ -383,5 +383,9 @@ contract GamePool is Ownable, ReentrancyGuard {
 
     function getCommissionClaimed() public view returns (bool) {
         return _commissionClaimed;
+    }
+
+    function getCommissionPercentage() public view returns (uint8) {
+        return i_commissionPercentage;
     }
 }

@@ -29,6 +29,82 @@ contract GamePoolTest is Test {
         vm.deal(charlie, 1 ether);
     }
 
+     // test send funds to contract
+    function testSendFundsDirectlyToContract() public {
+        vm.prank(bob);
+        (bool success,) = address(pool).call{value: 10 ether}("");
+        assertEq(success, false);
+        assertEq(address(pool).balance, 0);
+    }
+
+    function testCannotBuyWithInactiveTicketSale() public {
+        vm.prank(msg.sender);
+        pool.enableBuyTicket(false);
+        vm.expectRevert();
+        vm.prank(bob);
+        pool.buyTicket{value: ticketPrice}();
+    }
+
+    function testCannotBuyTicketWithInsufficientFunds() public {
+        vm.expectRevert();
+        vm.prank(bob);
+        pool.buyTicket{value: ticketPrice/2}();
+    }
+
+     function testCannotBuyTicketTwice() public {
+        vm.prank(bob);
+        pool.buyTicket{value: ticketPrice}();
+        vm.expectRevert();
+        vm.prank(bob);
+        pool.buyTicket{value: ticketPrice}();
+    }
+
+    function testCannotBuyTicketBeforeEnrollmentPhase() public {
+        vm.warp(0);
+        vm.expectRevert();
+        vm.prank(bob);
+        pool.buyTicket{value: ticketPrice}();
+    }
+
+    function testCannotBuyTicketAfterPlaytime() public {
+        vm.warp(pool.getPlayEndTime() + 10);
+        vm.expectRevert();
+        vm.prank(bob);
+        pool.buyTicket{value: ticketPrice}();
+    }
+
+    function testDisableBuyTicket() public {
+        vm.prank(msg.sender);
+        pool.enableBuyTicket(false);
+        vm.expectRevert();
+        vm.prank(bob);
+        pool.buyTicket{value: ticketPrice}();
+    }
+
+    function testCannotSetBuyTicketToSameValue() public {
+        vm.prank(msg.sender);
+        pool.enableBuyTicket(false);
+        vm.expectRevert();
+        vm.prank(msg.sender);
+        pool.enableBuyTicket(false);
+    }
+
+    function testCannotEnableBuyTicketAfterRefundActivated() public {
+        vm.prank(msg.sender);
+        pool.enableRefund();
+        vm.expectRevert();
+        vm.prank(msg.sender);
+        pool.enableBuyTicket(true);
+    }
+
+    function testEnableBuyTicketAfterDisabling() public {
+        vm.prank(msg.sender);
+        pool.enableBuyTicket(false);
+        vm.prank(msg.sender);
+        pool.enableBuyTicket(true);
+        assertEq(pool.getCanBuyTicket(), true);
+    }
+
     function testBuyTicket() public {
         vm.prank(bob);
         pool.buyTicket{value: ticketPrice}();
@@ -51,6 +127,22 @@ contract GamePoolTest is Test {
         pool.buyTicket{value: ticketPrice}();
 
         vm.stopPrank();
+    }
+
+    function testBuyFailAfterEnrollmentPhase() public {
+        vm.warp(pool.getPlayEndTime() + 10);
+        vm.expectRevert();
+        vm.startPrank(bob);
+        pool.buyTicket{value: ticketPrice}();
+        vm.stopPrank();
+    }
+
+    function testSetMerkle() public merkleSetup {
+        vm.prank(msg.sender);
+        pool.setPrizeMerkleRoot(0xa608b0934eef3f6889620db202010e1f63bc79069f02151dfb115392042aae5b);
+        assertEq(
+            pool.getPrizeMerkleRoot(), 0xa608b0934eef3f6889620db202010e1f63bc79069f02151dfb115392042aae5b
+        );
     }
 
     function testClaimPrize() public {
@@ -146,5 +238,114 @@ contract GamePoolTest is Test {
         pool.withdrawUnclaimedPrizes();
         assertEq(address(pool).balance, 0);
         assertEq(pool.getWithdrawAddress().balance, withdrawerPrevBalance + 1 ether);
+    }
+
+    function testDenyWithdrawUnclaimedPrizesIfNotOwner() public {
+        vm.expectRevert();
+        vm.prank(bob);
+        pool.withdrawUnclaimedPrizes();
+    }
+
+    function testDenyWithdrawBeforeClaimExpiry() public {
+        vm.expectRevert();
+        vm.prank(msg.sender);
+        pool.withdrawUnclaimedPrizes();
+    }
+
+    function testNoUnclaimedPrizes() public {
+        vm.warp(pool.getClaimExpiryTime() + 31 days);
+        vm.expectRevert();
+        vm.prank(msg.sender);
+        pool.withdrawUnclaimedPrizes();
+    }
+
+    
+
+    function testRefundInactive() public {
+        vm.expectRevert();
+        vm.startPrank(bob);
+        pool.claimRefund();
+        vm.stopPrank();
+    }
+
+    function testRefund() public {
+        vm.prank(bob);
+        pool.buyTicket{value: ticketPrice}();
+
+        vm.warp(pool.getPlayEndTime() + 10);
+        vm.prank(msg.sender);
+        pool.enableRefund();
+        assertEq(pool.getCanRefund(), true);
+        assertEq(pool.getCanBuyTicket(), false);
+
+        // bob claims refund
+        vm.prank(bob);
+        pool.claimRefund();
+
+        assertEq(bob.balance, bobPrevBalance);
+        assertEq(pool.getUserRefundClaim(bob), true);
+        assertEq(pool.getRefundClaimCount(), 1);
+        assertEq(address(pool).balance, 0);
+    }
+
+    function testRefundAlreadyActive() public {
+        vm.prank(msg.sender);
+        pool.enableRefund();
+        assertEq(pool.getCanRefund(), true);
+        assertEq(pool.getCanBuyTicket(), false);
+        vm.expectRevert();
+        vm.prank(msg.sender);
+        pool.enableRefund();
+    }
+
+    function testCannotActivateRefundIfRootExists() public {
+        vm.warp(pool.getPlayEndTime() + 10);
+        vm.prank(msg.sender);
+        pool.setPrizeMerkleRoot(0xa608b0934eef3f6889620db202010e1f63bc79069f02151dfb115392042aae5b);
+        vm.expectRevert();
+        vm.prank(msg.sender);
+        pool.enableRefund();
+    }
+
+    function testCannotDisableRefundTwice() public {
+        vm.startPrank(msg.sender);
+        pool.enableRefund();
+        pool.disableRefund(false);
+        vm.expectRevert();
+        pool.disableRefund(false);
+        vm.stopPrank();
+    }
+
+    function testCannotDisableRefundIfClaimsExist() public {
+        vm.prank(bob);
+        pool.buyTicket{value: ticketPrice}();
+
+        vm.prank(msg.sender);
+        pool.enableRefund();
+
+        vm.prank(bob);
+        pool.claimRefund();
+
+        vm.expectRevert();
+        vm.prank(msg.sender);
+        pool.disableRefund(false);
+    }
+
+    function testRefundInvalid() public {
+        vm.prank(msg.sender);
+        pool.enableRefund();
+        vm.expectRevert();
+        vm.prank(bob);
+        pool.claimRefund();
+        assertEq(pool.getUserRefundClaim(bob), false);
+    }
+
+    function testRefundClaimExpired() public {
+        vm.prank(msg.sender);
+        pool.enableRefund();
+        vm.warp(pool.getClaimExpiryTime() + 31 days);
+        vm.expectRevert();
+        vm.prank(bob);
+        pool.claimRefund();
     }
 }
