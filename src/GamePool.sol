@@ -35,6 +35,14 @@ contract GamePool is Ownable, ReentrancyGuard {
     // Merkle Root Errors
     error MerkleRootCannotBeZero();
 
+    // Refund Errors
+    error RefundInactive();
+    error RefundAlreadyClaimed(address user);
+    error RefundTransferFailed(address recipient);
+    error RefundInPlace();
+    error RefundCountNotZero(uint32 count);
+    error RefundAlreadyInactive();
+
     // Commission Errors
     error NoCommissionToClaim();
     error CommissionAlreadyClaimed();
@@ -61,15 +69,18 @@ contract GamePool is Ownable, ReentrancyGuard {
      * STATE VARIABLES
      */
     bool private _canBuyTicket;
+    bool private _refundActivated;
     bool private _commissionClaimed;
     uint32 private _uniqueParticipants;
     bytes32 private _prizeMerkleRoot;
     uint32 private _prizeClaimCount;
+    uint32 private _refundClaimCount;
     uint256 private _balanceAfterPlaytime;
     address payable private _withdrawAddress;
 
     mapping(address => bool) private _participantRecorded;
     mapping(address => bool) private _prizeClaims;
+    mapping(address => bool) private _refundClaims;
 
     /**
      * EVENTS
@@ -79,8 +90,11 @@ contract GamePool is Ownable, ReentrancyGuard {
     event TicketBought(address indexed participant);
     event MerkleRootSet(bytes32 merkleRoot);
     event PrizeClaimed(address indexed participant, uint256 amount);
+    event RefundClaimed(address indexed participant, uint256 amount);
     event OwnerCommissionClaimed(address indexed to, uint256 amount);
     event UnclaimedPrizesWithdrawn(uint256 amount);
+    event RefundEnabled();
+    event RefundDisabled();
 
 
     constructor(
@@ -138,6 +152,9 @@ contract GamePool is Ownable, ReentrancyGuard {
     }
 
     function enableBuyTicket(bool value) external onlyOwner enrollPhase {
+        // Check refund state
+        if (value == true && _refundActivated) revert RefundInPlace();
+        
         // Check merkle root is not set
         if (value == true && _prizeMerkleRoot != bytes32(0)) revert PrizeStructureInPlace();
 
@@ -148,8 +165,34 @@ contract GamePool is Ownable, ReentrancyGuard {
         emit TicketSaleEnabled(value);
     }
 
+    function enableRefund() external virtual onlyOwner claimPhase {
+        if (_refundActivated) revert RefundInPlace();
+
+        // Check merkle root is not set
+        if (_prizeMerkleRoot != bytes32(0)) revert PrizeStructureInPlace();
+
+        _canBuyTicket = false;
+        _refundActivated = true;
+
+        emit RefundEnabled();
+    }
+
+    function disableRefund(bool canBuyTicket) external virtual onlyOwner {
+        if (!_refundActivated) revert RefundAlreadyInactive();
+
+        if (_refundClaimCount > 0) revert RefundCountNotZero(_refundClaimCount);
+
+        _canBuyTicket = canBuyTicket;
+        _refundActivated = false;
+
+        emit RefundDisabled();
+    }
+
 
     function setPrizeMerkleRoot(bytes32 merkleRoot) public virtual onlyOwner claimPhase afterPlaytimePhase {
+        // Check refund is not activated
+        if (_refundActivated) revert RefundInPlace();
+
         // merkle root cannot be zero
         if (merkleRoot == bytes32(0)) revert MerkleRootCannotBeZero();
 
@@ -209,6 +252,26 @@ contract GamePool is Ownable, ReentrancyGuard {
         if (!success) revert PrizeTransferFailed(msg.sender);
     }
 
+    function claimRefund() external virtual claimPhase nonReentrant {
+        // Ensure refund process is activated
+        if (!_refundActivated) revert RefundInactive();
+
+        // Check if user has already claimed
+        if (_refundClaims[msg.sender]) revert RefundAlreadyClaimed(msg.sender);
+
+        // Mark refund as claimed
+        _refundClaims[msg.sender] = true;
+        unchecked {
+            _refundClaimCount++;
+        }
+
+        emit RefundClaimed(msg.sender, i_ticketPrice);
+
+        // Send refund
+        (bool success,) = payable(msg.sender).call{value: i_ticketPrice}("");
+        if (!success) revert RefundTransferFailed(msg.sender);
+    }
+
     function claimOwnerCommission() external virtual onlyOwner afterPlaytimePhase {
         // Make owner claim only after the prize structure is in place
         if (_prizeMerkleRoot == bytes32(0)) revert PrizeStructureNotSet();
@@ -258,6 +321,10 @@ contract GamePool is Ownable, ReentrancyGuard {
         return _canBuyTicket;
     }
 
+    function getCanRefund() public view returns (bool) {
+        return _refundActivated;
+    }
+
     function getWithdrawAddress() public view returns (address) {
         return _withdrawAddress;
     }
@@ -296,6 +363,14 @@ contract GamePool is Ownable, ReentrancyGuard {
 
     function getUserPrizeClaim(address user) public view returns (bool) {
         return _prizeClaims[user];
+    }
+
+    function getRefundClaimCount() public view returns (uint32) {
+        return _refundClaimCount;
+    }
+
+    function getUserRefundClaim(address user) public view returns (bool) {
+        return _refundClaims[user];
     }
 
     function getCurrentCommission() public view returns (uint256) {
