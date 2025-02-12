@@ -21,9 +21,11 @@ contract GamePool is Ownable, ReentrancyGuard {
     error ClaimPhaseOver();
 
     // Buy Ticket Errors
+    error TicketSaleAlreadySetTo(bool value);
     error TicketSaleInactive();
     error UserAlreadyHasTicket();
     error AmountPaidInvalid(uint256 paid, uint256 price);
+    error PrizeStructureInPlace();
 
     // Claim Errors
     error PrizeStructureNotSet();
@@ -54,7 +56,6 @@ contract GamePool is Ownable, ReentrancyGuard {
     uint256 private immutable i_claimExpiryTime;
     uint256 private immutable i_ticketPrice;
     uint8 private immutable i_commissionPercentage;
-    address payable immutable i_withdrawAddress;
 
     /**
      * STATE VARIABLES
@@ -65,6 +66,7 @@ contract GamePool is Ownable, ReentrancyGuard {
     bytes32 private _prizeMerkleRoot;
     uint32 private _prizeClaimCount;
     uint256 private _balanceAfterPlaytime;
+    address payable private _withdrawAddress;
 
     mapping(address => bool) private _participantRecorded;
     mapping(address => bool) private _prizeClaims;
@@ -72,11 +74,13 @@ contract GamePool is Ownable, ReentrancyGuard {
     /**
      * EVENTS
      */
+    event WithdrawAddressUpdated(address indexed newWithdrawAddress);
+    event TicketSaleEnabled(bool value);
     event TicketBought(address indexed participant);
-    event PrizeClaimed(address indexed participant, uint256 amount);
-    event UnclaimedPrizesWithdrawn(uint256 amount);
     event MerkleRootSet(bytes32 merkleRoot);
+    event PrizeClaimed(address indexed participant, uint256 amount);
     event OwnerCommissionClaimed(address indexed to, uint256 amount);
+    event UnclaimedPrizesWithdrawn(uint256 amount);
 
 
     constructor(
@@ -98,7 +102,7 @@ contract GamePool is Ownable, ReentrancyGuard {
 
         _canBuyTicket = canBuyTicket_;
         i_ticketPrice = ticketPrice_;
-        i_withdrawAddress = withdrawAddress_;
+        _withdrawAddress = withdrawAddress_;
         i_commissionPercentage = commissionPercentage_;
 
         // Enroll start time cannot be less than now
@@ -124,6 +128,24 @@ contract GamePool is Ownable, ReentrancyGuard {
     modifier claimPhase() {
         if (block.timestamp > i_claimExpiryTime) revert ClaimPhaseOver();
         _;
+    }
+
+    function updateWithdrawAddress(address payable newWithdrawAddress) external onlyOwner {
+        if (newWithdrawAddress == address(0)) revert WithdrawAddressCannotBeZeroAddress();
+        _withdrawAddress = newWithdrawAddress;
+
+        emit WithdrawAddressUpdated(newWithdrawAddress);
+    }
+
+    function enableBuyTicket(bool value) external onlyOwner enrollPhase {
+        // Check merkle root is not set
+        if (value == true && _prizeMerkleRoot != bytes32(0)) revert PrizeStructureInPlace();
+
+        if (_canBuyTicket == value) revert TicketSaleAlreadySetTo(value);
+
+        _canBuyTicket = value;
+
+        emit TicketSaleEnabled(value);
     }
 
 
@@ -200,9 +222,9 @@ contract GamePool is Ownable, ReentrancyGuard {
 
         _commissionClaimed = true;
 
-        emit OwnerCommissionClaimed(i_withdrawAddress, commissionAmount);
+        emit OwnerCommissionClaimed(_withdrawAddress, commissionAmount);
 
-       (bool success,) = i_withdrawAddress.call{value: commissionAmount}("");
+       (bool success,) = _withdrawAddress.call{value: commissionAmount}("");
         if (!success) revert CommissionTransferFailed();
     }
 
@@ -222,7 +244,7 @@ contract GamePool is Ownable, ReentrancyGuard {
         emit UnclaimedPrizesWithdrawn(balance);
 
         // Withdraw unclaimed prizes
-        (bool success,) = i_withdrawAddress.call{value: balance}("");
+        (bool success,) = _withdrawAddress.call{value: balance}("");
         if (!success) revert UnclaimedPrizesTransferFailed();
     }
 
@@ -237,7 +259,7 @@ contract GamePool is Ownable, ReentrancyGuard {
     }
 
     function getWithdrawAddress() public view returns (address) {
-        return i_withdrawAddress;
+        return _withdrawAddress;
     }
 
     function getEnrollStartTime() public view returns (uint256) {
