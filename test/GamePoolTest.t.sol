@@ -16,7 +16,7 @@ contract GamePoolTest is Test {
     // charlie: 0xea475d60c118d7058beF4bDd9c32bA51139a74e0
 
     uint256 public bobPrevBalance = 0;
-    uint256 public ticketPrice = 1 ether;
+    uint256 public poolPrice = 1 ether;
 
     function setUp() public {
         DeployGamePool deployer = new DeployGamePool();
@@ -37,78 +37,78 @@ contract GamePoolTest is Test {
         assertEq(address(pool).balance, 0);
     }
 
-    function testCannotBuyWithInactiveTicketSale() public {
+    function testCannotBuyWithInactivePoolIntake() public {
         vm.prank(msg.sender);
-        pool.enableBuyTicket(false);
+        pool.enableJoinPool(false);
         vm.expectRevert();
         vm.prank(bob);
-        pool.buyTicket{value: ticketPrice}();
+        pool.joinPool{value: poolPrice}();
     }
 
-    function testCannotBuyTicketWithInsufficientFunds() public {
+    function testCannotJoinPoolWithInsufficientFunds() public {
         vm.expectRevert();
         vm.prank(bob);
-        pool.buyTicket{value: ticketPrice/2}();
+        pool.joinPool{value: poolPrice/2}();
     }
 
-     function testCannotBuyTicketTwice() public {
+     function testCannotJoinPoolTwice() public {
         vm.prank(bob);
-        pool.buyTicket{value: ticketPrice}();
+        pool.joinPool{value: poolPrice}();
         vm.expectRevert();
         vm.prank(bob);
-        pool.buyTicket{value: ticketPrice}();
+        pool.joinPool{value: poolPrice}();
     }
 
-    function testCannotBuyTicketBeforeEnrollmentPhase() public {
+    function testCannotJoinPoolBeforeEnrollmentPhase() public {
         vm.warp(0);
         vm.expectRevert();
         vm.prank(bob);
-        pool.buyTicket{value: ticketPrice}();
+        pool.joinPool{value: poolPrice}();
     }
 
-    function testCannotBuyTicketAfterPlaytime() public {
+    function testCannotJoinPoolAfterPlaytime() public {
         vm.warp(pool.getPlayEndTime() + 10);
         vm.expectRevert();
         vm.prank(bob);
-        pool.buyTicket{value: ticketPrice}();
+        pool.joinPool{value: poolPrice}();
     }
 
-    function testDisableBuyTicket() public {
+    function testDisableJoinPool() public {
         vm.prank(msg.sender);
-        pool.enableBuyTicket(false);
+        pool.enableJoinPool(false);
         vm.expectRevert();
         vm.prank(bob);
-        pool.buyTicket{value: ticketPrice}();
+        pool.joinPool{value: poolPrice}();
     }
 
-    function testCannotSetBuyTicketToSameValue() public {
+    function testCannotSetJoinPoolToSameValue() public {
         vm.prank(msg.sender);
-        pool.enableBuyTicket(false);
+        pool.enableJoinPool(false);
         vm.expectRevert();
         vm.prank(msg.sender);
-        pool.enableBuyTicket(false);
+        pool.enableJoinPool(false);
     }
 
-    function testCannotEnableBuyTicketAfterRefundActivated() public {
+    function testCannotEnableJoinPoolAfterRefundActivated() public {
         vm.prank(msg.sender);
         pool.enableRefund();
         vm.expectRevert();
         vm.prank(msg.sender);
-        pool.enableBuyTicket(true);
+        pool.enableJoinPool(true);
     }
 
-    function testEnableBuyTicketAfterDisabling() public {
+    function testEnableJoinPoolAfterDisabling() public {
         vm.prank(msg.sender);
-        pool.enableBuyTicket(false);
+        pool.enableJoinPool(false);
         vm.prank(msg.sender);
-        pool.enableBuyTicket(true);
-        assertEq(pool.getCanBuyTicket(), true);
+        pool.enableJoinPool(true);
+        assertEq(pool.getCanJoinPool(), true);
     }
 
-    function testBuyTicket() public {
+    function testJoinPool() public {
         vm.prank(bob);
-        pool.buyTicket{value: ticketPrice}();
-        assertEq(bobPrevBalance - ticketPrice, bob.balance);
+        pool.joinPool{value: poolPrice}();
+        assertEq(bobPrevBalance - poolPrice, bob.balance);
         assertEq(pool.getUserRecorded(bob), true);
         assertEq(pool.getUniqueParticipants(), 1);
     }
@@ -116,15 +116,15 @@ contract GamePoolTest is Test {
     function testInvalidPrice() public {
         vm.prank(bob);
         vm.expectRevert();
-        pool.buyTicket{value: ticketPrice + 1 ether}();
+        pool.joinPool{value: poolPrice + 1 ether}();
     }
 
     function testRebuyFail() public {
         vm.startPrank(bob);
-        pool.buyTicket{value: ticketPrice}();
+        pool.joinPool{value: poolPrice}();
 
         vm.expectRevert();
-        pool.buyTicket{value: ticketPrice}();
+        pool.joinPool{value: poolPrice}();
 
         vm.stopPrank();
     }
@@ -133,7 +133,7 @@ contract GamePoolTest is Test {
         vm.warp(pool.getPlayEndTime() + 10);
         vm.expectRevert();
         vm.startPrank(bob);
-        pool.buyTicket{value: ticketPrice}();
+        pool.joinPool{value: poolPrice}();
         vm.stopPrank();
     }
 
@@ -148,11 +148,11 @@ contract GamePoolTest is Test {
     function testClaimPrize() public {
         
         vm.prank(bob);
-        pool.buyTicket{value: ticketPrice}();
+        pool.joinPool{value: poolPrice}();
         vm.prank(alice);
-        pool.buyTicket{value: ticketPrice}();
+        pool.joinPool{value: poolPrice}();
         vm.prank(charlie);
-        pool.buyTicket{value: ticketPrice}();
+        pool.joinPool{value: poolPrice}();
 
         uint256 alicePrevBalance = alice.balance;
         uint256 charliePrevBalance = charlie.balance;
@@ -270,13 +270,13 @@ contract GamePoolTest is Test {
 
     function testRefund() public {
         vm.prank(bob);
-        pool.buyTicket{value: ticketPrice}();
+        pool.joinPool{value: poolPrice}();
 
         vm.warp(pool.getPlayEndTime() + 10);
         vm.prank(msg.sender);
         pool.enableRefund();
         assertEq(pool.getCanRefund(), true);
-        assertEq(pool.getCanBuyTicket(), false);
+        assertEq(pool.getCanJoinPool(), false);
 
         // bob claims refund
         vm.prank(bob);
@@ -292,7 +292,7 @@ contract GamePoolTest is Test {
         vm.prank(msg.sender);
         pool.enableRefund();
         assertEq(pool.getCanRefund(), true);
-        assertEq(pool.getCanBuyTicket(), false);
+        assertEq(pool.getCanJoinPool(), false);
         vm.expectRevert();
         vm.prank(msg.sender);
         pool.enableRefund();
@@ -318,7 +318,7 @@ contract GamePoolTest is Test {
 
     function testCannotDisableRefundIfClaimsExist() public {
         vm.prank(bob);
-        pool.buyTicket{value: ticketPrice}();
+        pool.joinPool{value: poolPrice}();
 
         vm.prank(msg.sender);
         pool.enableRefund();
