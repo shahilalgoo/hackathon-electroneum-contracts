@@ -2,12 +2,12 @@
 pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
-import {GamePool} from "src/GamePool.sol";
-import {DeployGamePool} from "script/DeployGamePool.s.sol";
+import {GamePoolNative} from "src/GamePoolNative.sol";
+import {DeployGamePoolNative} from "script/DeployGamePoolNative.s.sol";
 import {console2} from "forge-std/console2.sol";
 
 contract GamePoolTest is Test {
-    GamePool public pool;
+    GamePoolNative public pool;
     address bob = makeAddr("bob");
     address alice = makeAddr("alice");
     address charlie = makeAddr("charlie");
@@ -19,7 +19,7 @@ contract GamePoolTest is Test {
     uint256 public poolPrice = 1 ether;
 
     function setUp() public {
-        DeployGamePool deployer = new DeployGamePool();
+        DeployGamePoolNative deployer = new DeployGamePoolNative();
         pool = deployer.run();
 
         vm.deal(bob, 100 ether);

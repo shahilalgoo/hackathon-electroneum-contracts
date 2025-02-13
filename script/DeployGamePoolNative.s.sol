@@ -2,12 +2,12 @@
 pragma solidity ^0.8.20;
 
 import {Script} from "forge-std/Script.sol";
-import {GamePool} from "src/GamePool.sol";
+import {GamePoolNative} from "src/GamePoolNative.sol";
 
-contract DeployGamePool is Script {
-    function run() external returns (GamePool) {
+contract DeployGamePoolNative is Script {
+    function run() external returns (GamePoolNative) {
         vm.startBroadcast();
-        GamePool pool = new GamePool(
+        GamePoolNative pool = new GamePoolNative(
             true,
             1 ether,
             15,

@@ -5,7 +5,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import {VerifyProof} from "src/utils/VerifyProof.sol";
 
-contract GamePool is Ownable, ReentrancyGuard {
+abstract contract BaseGamePool is Ownable, ReentrancyGuard {
     /**
      * ERRORS
      */
@@ -76,7 +76,7 @@ contract GamePool is Ownable, ReentrancyGuard {
     uint32 private _prizeClaimCount;
     uint32 private _refundClaimCount;
     uint256 private _balanceAfterPlaytime;
-    address payable private _withdrawAddress;
+    address payable internal _withdrawAddress;
 
     mapping(address => bool) private _participantRecorded;
     mapping(address => bool) private _prizeClaims;
@@ -200,7 +200,7 @@ contract GamePool is Ownable, ReentrancyGuard {
         _canJoinPool = false;
 
         // Record balance after playtime, so we can calculate commission
-        _balanceAfterPlaytime = address(this).balance;
+        _balanceAfterPlaytime = getContractBalance();
 
         _prizeMerkleRoot = merkleRoot;
 
@@ -215,7 +215,7 @@ contract GamePool is Ownable, ReentrancyGuard {
         if (_participantRecorded[msg.sender]) revert UserAlreadyInPool();
 
         // Check if amount paid/allowed is correct
-        if (msg.value != i_poolPrice) revert AmountPaidInvalid(msg.value, i_poolPrice);
+        _validateAmountPaid(i_poolPrice);
 
         // Count unique participant
         unchecked {
@@ -226,6 +226,9 @@ contract GamePool is Ownable, ReentrancyGuard {
         _participantRecorded[msg.sender] = true;
 
         emit PoolJoined(msg.sender);
+
+        // transfer tokens, if applicable
+        _sendTokenOnJoinPool(i_poolPrice);
     }
 
     function claimPrize(bytes32[] calldata proof, uint256 amount) external claimPhase afterPlaytimePhase nonReentrant {
@@ -248,8 +251,7 @@ contract GamePool is Ownable, ReentrancyGuard {
         emit PrizeClaimed(msg.sender, amount);
 
         // Send prize
-        (bool success,) = payable(msg.sender).call{value: amount}("");
-        if (!success) revert PrizeTransferFailed(msg.sender);
+        _sendPrize(amount);
     }
 
     function claimRefund() external virtual claimPhase nonReentrant {
@@ -268,8 +270,7 @@ contract GamePool is Ownable, ReentrancyGuard {
         emit RefundClaimed(msg.sender, i_poolPrice);
 
         // Send refund
-        (bool success,) = payable(msg.sender).call{value: i_poolPrice}("");
-        if (!success) revert RefundTransferFailed(msg.sender);
+        _sendRefund(i_poolPrice);
     }
 
     function claimOwnerCommission() external virtual onlyOwner afterPlaytimePhase {
@@ -287,8 +288,7 @@ contract GamePool is Ownable, ReentrancyGuard {
 
         emit OwnerCommissionClaimed(_withdrawAddress, commissionAmount);
 
-       (bool success,) = _withdrawAddress.call{value: commissionAmount}("");
-        if (!success) revert CommissionTransferFailed();
+       _sendOwnerCommission(commissionAmount);
     }
 
 
@@ -299,23 +299,30 @@ contract GamePool is Ownable, ReentrancyGuard {
         }
 
         // Determine the balance of the contract
-        uint256 balance = address(this).balance;
+        uint256 balance = getContractBalance();
 
         // Ensure there is a balance to withdraw
         if (balance == 0) revert NoUnclaimedPrizes();
 
         emit UnclaimedPrizesWithdrawn(balance);
 
-        // Withdraw unclaimed prizes
-        (bool success,) = _withdrawAddress.call{value: balance}("");
-        if (!success) revert UnclaimedPrizesTransferFailed();
+        // Withdraw unclaimed prizes based on token type
+        _sendUnclaimedPrizes(balance);
     }
 
+    function _validateAmountPaid(uint256 amount) internal virtual;
+    function _sendTokenOnJoinPool(uint256 amount) internal virtual;
+    function _sendPrize(uint256 amount) internal virtual;
+    function _sendRefund(uint256 refundAmount) internal virtual;
+    function _sendOwnerCommission(uint256 commissionAmount) internal virtual;
+    function _sendUnclaimedPrizes(uint256 balance) internal virtual;
 
 
     /**
      * GETTERS
      */
+
+    function getContractBalance() public view virtual returns (uint256);
 
     function getCanJoinPool() public view returns (bool) {
         return _canJoinPool;
@@ -375,7 +382,7 @@ contract GamePool is Ownable, ReentrancyGuard {
 
     function getCurrentCommission() public view returns (uint256) {
         if (_prizeMerkleRoot == bytes32(0)) {
-            return i_commissionPercentage * address(this).balance / 100;
+            return i_commissionPercentage * getContractBalance() / 100;
         } else {
             return i_commissionPercentage * _balanceAfterPlaytime / 100;
         }
