@@ -259,8 +259,6 @@ contract GamePoolTest is Test {
         pool.withdrawUnclaimedPrizes();
     }
 
-    
-
     function testRefundInactive() public {
         vm.expectRevert();
         vm.startPrank(bob);
@@ -296,6 +294,15 @@ contract GamePoolTest is Test {
         vm.expectRevert();
         vm.prank(msg.sender);
         pool.enableRefund();
+    }
+
+    function testCannotRefundIfNotInPool() public {
+        vm.prank(msg.sender);
+        pool.enableRefund();
+
+        vm.expectRevert();
+        vm.prank(alice);
+        pool.claimRefund();
     }
 
     function testCannotActivateRefundIfRootExists() public {

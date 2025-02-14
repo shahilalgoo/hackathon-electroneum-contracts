@@ -4,6 +4,11 @@ pragma solidity ^0.8.20;
 import {BaseGamePool} from "./BaseGamePool.sol";
 
 contract GamePoolNative is BaseGamePool {
+    /**
+     * @dev Constructor calls BaseGamePool's constructor.
+     *
+     * Also validates price
+     */
     constructor(
         bool canJoinPool_,
         uint256 poolPrice_,

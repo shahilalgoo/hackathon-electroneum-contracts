@@ -15,6 +15,11 @@ contract GamePoolERC20 is BaseGamePool {
     error TokenBalanceInsufficient();
     error TokenAllowanceInsufficient();
 
+    /**
+     * @dev Constructor calls BaseGamePool's constructor.
+     *
+     * Also validates and sets the provided ERC20 token address.
+     */
     constructor(
         bool canJoinPool_,
         uint256 poolPrice_,
@@ -25,6 +30,7 @@ contract GamePoolERC20 is BaseGamePool {
         uint256 playEndTime_
     )
         BaseGamePool(canJoinPool_, poolPrice_,  commissionPercentage_, withdrawAddress_, enrollStartTime_, playEndTime_){
+            // Validate and set erc20 token address
             AddressValidator.ERC20Check(erc20TokenAddress_);
             i_tokenAddress = IERC20(erc20TokenAddress_);
         }

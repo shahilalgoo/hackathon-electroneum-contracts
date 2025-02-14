@@ -42,6 +42,7 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
     error RefundInPlace();
     error RefundCountNotZero(uint32 count);
     error RefundAlreadyInactive();
+    error UserNotInPool(address user);
 
     // Commission Errors
     error NoCommissionToClaim();
@@ -53,11 +54,10 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
     error ClaimExpiryTimeNotReached();
     error NoUnclaimedPrizes();
 
-
     /**
      * CONSTANTS/IMMUTABLES
      */
-    uint8 private constant MAX_OWNER_COMMISSION_PERCENTAGE = 15;
+    uint8 private constant MAX_OWNER_COMMISSION_PERCENTAGE = 30;
     uint256 private constant CLAIM_EXPIRY_TIME = 30 days;
     uint256 private immutable i_enrollStartTime;
     uint256 private immutable i_playEndTime;
@@ -96,7 +96,12 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
     event RefundEnabled();
     event RefundDisabled();
 
-
+    /**
+     * @dev Initializes contract state based on provided configuration for commission, withdraw address, timings,
+     * - `withdrawAddress_` must be a non-zero address.
+     * - `enrollStartTime_` defaults to current block time if set in the past.
+     * - `playEndTime_` defaults to current block time + 10 minutes if set within 10 minutes of the current time.
+     */
     constructor(
         bool canJoinPool_, 
         uint256 poolPrice_,
@@ -105,7 +110,7 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
         uint256 enrollStartTime_, 
         uint256 playEndTime_) 
         Ownable() {
-        // Commission cannot be higher than 15%
+        // Commission cannot be higher than 30%
         if (commissionPercentage_ > MAX_OWNER_COMMISSION_PERCENTAGE) revert CommissionPercentageTooHigh();
 
         // Pool price cannot be zero
@@ -128,22 +133,34 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
         i_claimExpiryTime = playEndTime_ + CLAIM_EXPIRY_TIME;
     }
 
+    /**
+     * @dev Restricts actions to the enrollment phase, as defined by `i_enrollStartTime` and `i_playEndTime`.
+     */
     modifier enrollPhase() {
         // Check if within enrollment/playtime
         if (block.timestamp < i_enrollStartTime || block.timestamp > i_playEndTime) revert EnrollmentPhaseInactive();
         _;
     }
 
+    /**
+     * @dev Restricts actions to after the end of the playtime phase.
+     */
     modifier afterPlaytimePhase() {
         if (block.timestamp <= i_playEndTime) revert PlaytimeNotOver();
         _;
     }
 
+    /**
+     * @dev Restricts actions to before `i_claimExpiryTime`, indicating the active claim phase.
+     */
     modifier claimPhase() {
         if (block.timestamp > i_claimExpiryTime) revert ClaimPhaseOver();
         _;
     }
 
+    /**
+     * @dev Allows owner to change the withdrawal address.
+     */
     function updateWithdrawAddress(address payable newWithdrawAddress) external onlyOwner {
         if (newWithdrawAddress == address(0)) revert WithdrawAddressCannotBeZeroAddress();
         _withdrawAddress = newWithdrawAddress;
@@ -151,6 +168,12 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
         emit WithdrawAddressUpdated(newWithdrawAddress);
     }
 
+    /**
+     * @dev Allows the owner to enable or disable pool intake during the enrollment phase.
+     *
+     * - `value` must not match the current `_canJoinPool` status.
+     * - If `value` is `true`, `_refundActivated` must be `false`.
+     */
     function enableJoinPool(bool value) external onlyOwner enrollPhase {
         // Check refund state
         if (value == true && _refundActivated) revert RefundInPlace();
@@ -165,6 +188,12 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
         emit PoolIntakeEnabled(value);
     }
 
+    /**
+     * @dev Allows the owner to enable refund mode during the claim phase, deactivating pool intake.
+     *
+     * - `_refundActivated` must be `false`.
+     * - `_prizeMerkleRoot` must not be set (indicating no prize structure in place).
+     */
     function enableRefund() external virtual onlyOwner claimPhase {
         if (_refundActivated) revert RefundInPlace();
 
@@ -177,6 +206,12 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
         emit RefundEnabled();
     }
 
+    /**
+     * @dev Allows the owner to disable refund mode, optionally re-enabling pool intake.
+     *
+     * - `_refundActivated` must be `true`.
+     * - `_refundClaimCount` must be zero.
+     */
     function disableRefund(bool canJoinPool) external virtual onlyOwner {
         if (!_refundActivated) revert RefundAlreadyInactive();
 
@@ -188,7 +223,12 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
         emit RefundDisabled();
     }
 
-
+    /**
+     * @dev Sets the Merkle root for prize claims during the claim phase and disables pool intake.
+     *
+     * - `i_playEndTime` must have passed.
+     * - `_refundActivated` must be `false`.
+     */
     function setPrizeMerkleRoot(bytes32 merkleRoot) public virtual onlyOwner claimPhase afterPlaytimePhase {
         // Check refund is not activated
         if (_refundActivated) revert RefundInPlace();
@@ -207,6 +247,13 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
         emit MerkleRootSet(merkleRoot);
     }
 
+    /**
+     * @dev Allows users to purchase a join the pool during the enrollment phase.
+     *
+     * - `_canJoinPool` must be true.
+     * - Caller must not already be in the pool.
+     * - The amount paid is checked to be equal to `i_poolPrice` in _validateAmountPaid().
+     */
     function joinPool() external payable enrollPhase nonReentrant {
         // Check can join pool
         if (!_canJoinPool) revert PoolIntakeInactive();
@@ -231,6 +278,12 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
         _sendTokenOnJoinPool(i_poolPrice);
     }
 
+    /**
+     * @dev Allows users to claim their prize by providing proof that is verified in the merkleRoot.
+     *
+     * - `_prizeMerkleRoot` must be set.
+     * - Caller must not have already claimed their prize.
+     */
     function claimPrize(bytes32[] calldata proof, uint256 amount) external claimPhase afterPlaytimePhase nonReentrant {
         // Check if merkle root is set
         if (_prizeMerkleRoot == bytes32(0)) revert PrizeStructureNotSet();
@@ -254,12 +307,22 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
         _sendPrize(amount);
     }
 
+    /**
+     * @dev Allows users to claim a refund if the refund process is active.
+     *
+     * - `_refundActivated` must be true.
+     * - Caller must not have already claimed a refund.
+     * - Calculated `refundAmount` must be greater than zero, based on the caller’s enrolled tiers.
+     */
     function claimRefund() external virtual claimPhase nonReentrant {
         // Ensure refund process is activated
         if (!_refundActivated) revert RefundInactive();
 
         // Check if user has already claimed
         if (_refundClaims[msg.sender]) revert RefundAlreadyClaimed(msg.sender);
+
+        // Check if user is in pool
+        if (!_participantRecorded[msg.sender]) revert UserNotInPool(msg.sender);
 
         // Mark refund as claimed
         _refundClaims[msg.sender] = true;
@@ -273,8 +336,15 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
         _sendRefund(i_poolPrice);
     }
 
+    /**
+     * @dev Allows owner to claim commission after playtime is over and merkle root is set.
+     *
+     * - `_prizeMerkleRoot` must be set.
+     * - Caller must not have already claimed the commission.
+     * - Commission goes to withdrawal address
+     */
     function claimOwnerCommission() external virtual onlyOwner afterPlaytimePhase {
-        // Make owner claim only after the prize structure is in place
+        // Owner can claim only after the prize structure is in place
         if (_prizeMerkleRoot == bytes32(0)) revert PrizeStructureNotSet();
 
         // Check if already claimed
@@ -291,7 +361,13 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
        _sendOwnerCommission(commissionAmount);
     }
 
-
+    /**
+     * @dev Allows the contract owner to withdraw unclaimed prizes if the claim condition is met.
+     *
+     * Requirements:
+     * - The contract must hold a non-zero balance of unclaimed prizes.
+     * - The withdrawn amount goes to the withdrawal address, not to the owner
+     */
     function withdrawUnclaimedPrizes() external onlyOwner {
          // Check expiry time
         if (block.timestamp < i_claimExpiryTime) {
@@ -310,18 +386,48 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
         _sendUnclaimedPrizes(balance);
     }
 
+    /**
+     * @dev Checks if the amount paid is correct.
+     */
     function _validateAmountPaid(uint256 amount) internal virtual;
+
+    /**
+     * @dev Function used to send the tokens to the contract during pool joining, needed for ERC20 pools.
+     *
+     */
     function _sendTokenOnJoinPool(uint256 amount) internal virtual;
+
+     /**
+     * @dev Function used for the prize sending transaction.
+     */   
     function _sendPrize(uint256 amount) internal virtual;
+
+    /**
+     * @dev Function used for the refund sending transaction.
+     */
     function _sendRefund(uint256 refundAmount) internal virtual;
+
+    /**
+     * @dev Function used for the owner commission sending transaction.
+     */
     function _sendOwnerCommission(uint256 commissionAmount) internal virtual;
+
+    /**
+     * @dev Function used for the unclaimed prizes sending transaction.
+     */
     function _sendUnclaimedPrizes(uint256 balance) internal virtual;
+
 
 
     /**
      * GETTERS
      */
 
+    /**
+     * @dev Returns the current balance of the contract. For example: ETH or ERC20
+     *
+     * This function should be overridden in child contracts.
+     */
     function getContractBalance() public view virtual returns (uint256);
 
     function getCanJoinPool() public view returns (bool) {
