@@ -154,6 +154,11 @@ contract GamePoolTest is Test {
         vm.prank(charlie);
         pool.joinPool{value: poolPrice}();
 
+        assertEq(pool.getUniqueParticipants(), 3);
+        assertEq(pool.getPoolPrice(), poolPrice);
+        assertEq(pool.getCommissionPercentage(), 15);
+        assertEq(pool.getPrizePool(), poolPrice * 3 * 85 / 100);
+
         uint256 alicePrevBalance = alice.balance;
         uint256 charliePrevBalance = charlie.balance;
 

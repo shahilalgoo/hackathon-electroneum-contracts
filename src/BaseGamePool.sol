@@ -494,6 +494,10 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
         }
     }
 
+    function getPrizePool() public view returns (uint256) {
+        return i_poolPrice * _uniqueParticipants * (100 - i_commissionPercentage) / 100;
+    }
+
     function getCommissionClaimed() public view returns (bool) {
         return _commissionClaimed;
     }
