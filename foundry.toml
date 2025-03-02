@@ -1,11 +1,11 @@
 [profile.default]
-src = 'src'
-out = 'out'
+evm_version = 'london'
 libs = ['lib']
+out = 'out'
 remappings = [
-    '@thirdweb-dev/=node_modules/@thirdweb-dev/',
-    '@openzeppelin=node_modules/@openzeppelin'
+  '@thirdweb-dev/=node_modules/@thirdweb-dev/',
+  '@openzeppelin=node_modules/@openzeppelin',
 ]
-
+src = 'src'
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config

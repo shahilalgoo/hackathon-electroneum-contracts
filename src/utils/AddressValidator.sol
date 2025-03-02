@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.19;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 library AddressValidator {
-    
     error InvalidTokenAddress();
 
     /**
@@ -21,8 +20,9 @@ library AddressValidator {
         codeSizeCheck(erc20tokenAddress_);
 
         // Check a function 'unique' to ERC20 (zero code addresses do not return errors)
-        try IERC20(erc20tokenAddress_).allowance(address(this), address(this)) returns (uint256) {}
-        catch {
+        try
+            IERC20(erc20tokenAddress_).allowance(address(this), address(this))
+        returns (uint256) {} catch {
             revert InvalidTokenAddress();
         }
     }

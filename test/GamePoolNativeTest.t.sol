@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.19;
 
 import {Test} from "forge-std/Test.sol";
 import {GamePoolNative} from "src/GamePoolNative.sol";
@@ -29,10 +29,10 @@ contract GamePoolTest is Test {
         vm.deal(charlie, 1 ether);
     }
 
-     // test send funds to contract
+    // test send funds to contract
     function testSendFundsDirectlyToContract() public {
         vm.prank(bob);
-        (bool success,) = address(pool).call{value: 10 ether}("");
+        (bool success, ) = address(pool).call{value: 10 ether}("");
         assertEq(success, false);
         assertEq(address(pool).balance, 0);
     }
@@ -48,10 +48,10 @@ contract GamePoolTest is Test {
     function testCannotJoinPoolWithInsufficientFunds() public {
         vm.expectRevert();
         vm.prank(bob);
-        pool.joinPool{value: poolPrice/2}();
+        pool.joinPool{value: poolPrice / 2}();
     }
 
-     function testCannotJoinPoolTwice() public {
+    function testCannotJoinPoolTwice() public {
         vm.prank(bob);
         pool.joinPool{value: poolPrice}();
         vm.expectRevert();
@@ -139,14 +139,16 @@ contract GamePoolTest is Test {
 
     function testSetMerkle() public merkleSetup {
         vm.prank(msg.sender);
-        pool.setPrizeMerkleRoot(0xa608b0934eef3f6889620db202010e1f63bc79069f02151dfb115392042aae5b);
+        pool.setPrizeMerkleRoot(
+            0xa608b0934eef3f6889620db202010e1f63bc79069f02151dfb115392042aae5b
+        );
         assertEq(
-            pool.getPrizeMerkleRoot(), 0xa608b0934eef3f6889620db202010e1f63bc79069f02151dfb115392042aae5b
+            pool.getPrizeMerkleRoot(),
+            0xa608b0934eef3f6889620db202010e1f63bc79069f02151dfb115392042aae5b
         );
     }
 
     function testClaimPrize() public {
-        
         vm.prank(bob);
         pool.joinPool{value: poolPrice}();
         vm.prank(alice);
@@ -157,7 +159,7 @@ contract GamePoolTest is Test {
         assertEq(pool.getUniqueParticipants(), 3);
         assertEq(pool.getPoolPrice(), poolPrice);
         assertEq(pool.getCommissionPercentage(), 15);
-        assertEq(pool.getPrizePool(), poolPrice * 3 * 85 / 100);
+        assertEq(pool.getPrizePool(), (poolPrice * 3 * 85) / 100);
 
         uint256 alicePrevBalance = alice.balance;
         uint256 charliePrevBalance = charlie.balance;
@@ -170,7 +172,9 @@ contract GamePoolTest is Test {
 
         // BOB
         bytes32[] memory proofBob = new bytes32[](1);
-        proofBob[0] = 0xdd1c535cc8d1ab705c6c9d65b873474a7225d917648f9edc09bda4f851b4318d;
+        proofBob[
+            0
+        ] = 0xdd1c535cc8d1ab705c6c9d65b873474a7225d917648f9edc09bda4f851b4318d;
 
         vm.prank(bob);
         pool.claimPrize(proofBob, 1 ether);
@@ -181,8 +185,12 @@ contract GamePoolTest is Test {
 
         // ALICE
         bytes32[] memory proofAlice = new bytes32[](2);
-        proofAlice[0] = 0xe41e3096cba7e4fa7e65e44b27890c4d99e274f7c58788c4131e5bddecacb99e;
-        proofAlice[1] = 0xecbc9750276e1ad49333464b124e860719bba0133709bc7860e6b4262f17360a;
+        proofAlice[
+            0
+        ] = 0xe41e3096cba7e4fa7e65e44b27890c4d99e274f7c58788c4131e5bddecacb99e;
+        proofAlice[
+            1
+        ] = 0xecbc9750276e1ad49333464b124e860719bba0133709bc7860e6b4262f17360a;
 
         vm.expectRevert();
         vm.prank(alice);
@@ -197,8 +205,12 @@ contract GamePoolTest is Test {
 
         // CHARLIE
         bytes32[] memory proofCharlie = new bytes32[](2);
-        proofCharlie[0] = 0x42cc8a55e963e0472bfe88474c638d374e1a860c2580fcf2d5ef698fbfd830c3;
-        proofCharlie[1] = 0xecbc9750276e1ad49333464b124e860719bba0133709bc7860e6b4262f17360a;
+        proofCharlie[
+            0
+        ] = 0x42cc8a55e963e0472bfe88474c638d374e1a860c2580fcf2d5ef698fbfd830c3;
+        proofCharlie[
+            1
+        ] = 0xecbc9750276e1ad49333464b124e860719bba0133709bc7860e6b4262f17360a;
 
         vm.prank(charlie);
         pool.claimPrize(proofCharlie, 1 ether);
@@ -206,7 +218,6 @@ contract GamePoolTest is Test {
         assertEq(pool.getPrizeClaimCount(), 3);
         assertEq(pool.getUserPrizeClaim(charlie), true);
         assertEq(address(pool).balance, 0 ether);
-
     }
 
     modifier merkleSetup() {
@@ -219,13 +230,18 @@ contract GamePoolTest is Test {
         uint256 withdrawerPrevBalance = pool.getWithdrawAddress().balance;
         vm.prank(msg.sender);
         vm.deal(address(pool), funds);
-        pool.setPrizeMerkleRoot(0xa608b0934eef3f6889620db202010e1f63bc79069f02151dfb115392042aae5b);
+        pool.setPrizeMerkleRoot(
+            0xa608b0934eef3f6889620db202010e1f63bc79069f02151dfb115392042aae5b
+        );
         uint256 contractPrevBalance = address(pool).balance;
         uint256 commissionAmount = pool.getCurrentCommission();
         vm.prank(msg.sender);
         pool.claimOwnerCommission();
         assertEq(pool.getCommissionClaimed(), true);
-        assertEq(pool.getWithdrawAddress().balance, withdrawerPrevBalance + commissionAmount);
+        assertEq(
+            pool.getWithdrawAddress().balance,
+            withdrawerPrevBalance + commissionAmount
+        );
         assertEq(address(pool).balance, contractPrevBalance - commissionAmount);
 
         // check cannot claim twice
@@ -242,7 +258,10 @@ contract GamePoolTest is Test {
         vm.prank(msg.sender);
         pool.withdrawUnclaimedPrizes();
         assertEq(address(pool).balance, 0);
-        assertEq(pool.getWithdrawAddress().balance, withdrawerPrevBalance + 1 ether);
+        assertEq(
+            pool.getWithdrawAddress().balance,
+            withdrawerPrevBalance + 1 ether
+        );
     }
 
     function testDenyWithdrawUnclaimedPrizesIfNotOwner() public {
@@ -313,7 +332,9 @@ contract GamePoolTest is Test {
     function testCannotActivateRefundIfRootExists() public {
         vm.warp(pool.getPlayEndTime() + 10);
         vm.prank(msg.sender);
-        pool.setPrizeMerkleRoot(0xa608b0934eef3f6889620db202010e1f63bc79069f02151dfb115392042aae5b);
+        pool.setPrizeMerkleRoot(
+            0xa608b0934eef3f6889620db202010e1f63bc79069f02151dfb115392042aae5b
+        );
         vm.expectRevert();
         vm.prank(msg.sender);
         pool.enableRefund();

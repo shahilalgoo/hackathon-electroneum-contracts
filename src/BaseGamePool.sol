@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.19;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
@@ -48,7 +48,7 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
     error NoCommissionToClaim();
     error CommissionAlreadyClaimed();
     error CommissionTransferFailed();
-    
+
     // Unclaimed Withdrawal Errors
     error UnclaimedPrizesTransferFailed();
     error ClaimExpiryTimeNotReached();
@@ -103,21 +103,23 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
      * - `playEndTime_` defaults to current block time + 10 minutes if set within 10 minutes of the current time.
      */
     constructor(
-        bool canJoinPool_, 
+        bool canJoinPool_,
         uint256 poolPrice_,
         uint8 commissionPercentage_,
         address payable withdrawAddress_,
-        uint256 enrollStartTime_, 
-        uint256 playEndTime_) 
-        Ownable() {
+        uint256 enrollStartTime_,
+        uint256 playEndTime_
+    ) Ownable() {
         // Commission cannot be higher than 30%
-        if (commissionPercentage_ > MAX_OWNER_COMMISSION_PERCENTAGE) revert CommissionPercentageTooHigh();
+        if (commissionPercentage_ > MAX_OWNER_COMMISSION_PERCENTAGE)
+            revert CommissionPercentageTooHigh();
 
         // Pool price cannot be zero
-        if (poolPrice_ == 0) revert PoolPriceCannotBeZero(); 
+        if (poolPrice_ == 0) revert PoolPriceCannotBeZero();
 
         // Withdraw address cannot be zero address
-        if (withdrawAddress_ == address(0)) revert WithdrawAddressCannotBeZeroAddress();
+        if (withdrawAddress_ == address(0))
+            revert WithdrawAddressCannotBeZeroAddress();
 
         _canJoinPool = canJoinPool_;
         i_poolPrice = poolPrice_;
@@ -125,10 +127,14 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
         i_commissionPercentage = commissionPercentage_;
 
         // Enroll start time cannot be less than now
-        i_enrollStartTime = enrollStartTime_ < block.timestamp ? block.timestamp : enrollStartTime_;
+        i_enrollStartTime = enrollStartTime_ < block.timestamp
+            ? block.timestamp
+            : enrollStartTime_;
 
         // Play end time cannot be less than 10 minutes from now
-        i_playEndTime = playEndTime_ < block.timestamp + 10 minutes ? block.timestamp + 10 minutes : playEndTime_;
+        i_playEndTime = playEndTime_ < block.timestamp + 10 minutes
+            ? block.timestamp + 10 minutes
+            : playEndTime_;
 
         i_claimExpiryTime = playEndTime_ + CLAIM_EXPIRY_TIME;
     }
@@ -138,7 +144,10 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
      */
     modifier enrollPhase() {
         // Check if within enrollment/playtime
-        if (block.timestamp < i_enrollStartTime || block.timestamp > i_playEndTime) revert EnrollmentPhaseInactive();
+        if (
+            block.timestamp < i_enrollStartTime ||
+            block.timestamp > i_playEndTime
+        ) revert EnrollmentPhaseInactive();
         _;
     }
 
@@ -161,8 +170,11 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
     /**
      * @dev Allows owner to change the withdrawal address.
      */
-    function updateWithdrawAddress(address payable newWithdrawAddress) external onlyOwner {
-        if (newWithdrawAddress == address(0)) revert WithdrawAddressCannotBeZeroAddress();
+    function updateWithdrawAddress(
+        address payable newWithdrawAddress
+    ) external onlyOwner {
+        if (newWithdrawAddress == address(0))
+            revert WithdrawAddressCannotBeZeroAddress();
         _withdrawAddress = newWithdrawAddress;
 
         emit WithdrawAddressUpdated(newWithdrawAddress);
@@ -179,7 +191,8 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
         if (value == true && _refundActivated) revert RefundInPlace();
 
         // Check merkle root is not set
-        if (value == true && _prizeMerkleRoot != bytes32(0)) revert PrizeStructureInPlace();
+        if (value == true && _prizeMerkleRoot != bytes32(0))
+            revert PrizeStructureInPlace();
 
         if (_canJoinPool == value) revert PoolIntakeAlreadySetTo(value);
 
@@ -229,7 +242,9 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
      * - `i_playEndTime` must have passed.
      * - `_refundActivated` must be `false`.
      */
-    function setPrizeMerkleRoot(bytes32 merkleRoot) public virtual onlyOwner claimPhase afterPlaytimePhase {
+    function setPrizeMerkleRoot(
+        bytes32 merkleRoot
+    ) public virtual onlyOwner claimPhase afterPlaytimePhase {
         // Check refund is not activated
         if (_refundActivated) revert RefundInPlace();
 
@@ -284,7 +299,10 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
      * - `_prizeMerkleRoot` must be set.
      * - Caller must not have already claimed their prize.
      */
-    function claimPrize(bytes32[] calldata proof, uint256 amount) external claimPhase afterPlaytimePhase nonReentrant {
+    function claimPrize(
+        bytes32[] calldata proof,
+        uint256 amount
+    ) external claimPhase afterPlaytimePhase nonReentrant {
         // Check if merkle root is set
         if (_prizeMerkleRoot == bytes32(0)) revert PrizeStructureNotSet();
 
@@ -343,7 +361,12 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
      * - Caller must not have already claimed the commission.
      * - Commission goes to withdrawal address
      */
-    function claimOwnerCommission() external virtual onlyOwner afterPlaytimePhase {
+    function claimOwnerCommission()
+        external
+        virtual
+        onlyOwner
+        afterPlaytimePhase
+    {
         // Owner can claim only after the prize structure is in place
         if (_prizeMerkleRoot == bytes32(0)) revert PrizeStructureNotSet();
 
@@ -358,7 +381,7 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
 
         emit OwnerCommissionClaimed(_withdrawAddress, commissionAmount);
 
-       _sendOwnerCommission(commissionAmount);
+        _sendOwnerCommission(commissionAmount);
     }
 
     /**
@@ -369,7 +392,7 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
      * - The withdrawn amount goes to the withdrawal address, not to the owner
      */
     function withdrawUnclaimedPrizes() external onlyOwner {
-         // Check expiry time
+        // Check expiry time
         if (block.timestamp < i_claimExpiryTime) {
             revert ClaimExpiryTimeNotReached();
         }
@@ -397,9 +420,9 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
      */
     function _sendTokenOnJoinPool(uint256 amount) internal virtual;
 
-     /**
+    /**
      * @dev Function used for the prize sending transaction.
-     */   
+     */
     function _sendPrize(uint256 amount) internal virtual;
 
     /**
@@ -416,8 +439,6 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
      * @dev Function used for the unclaimed prizes sending transaction.
      */
     function _sendUnclaimedPrizes(uint256 balance) internal virtual;
-
-
 
     /**
      * GETTERS
@@ -488,14 +509,17 @@ abstract contract BaseGamePool is Ownable, ReentrancyGuard {
 
     function getCurrentCommission() public view returns (uint256) {
         if (_prizeMerkleRoot == bytes32(0)) {
-            return i_commissionPercentage * getContractBalance() / 100;
+            return (i_commissionPercentage * getContractBalance()) / 100;
         } else {
-            return i_commissionPercentage * _balanceAfterPlaytime / 100;
+            return (i_commissionPercentage * _balanceAfterPlaytime) / 100;
         }
     }
 
     function getPrizePool() public view returns (uint256) {
-        return i_poolPrice * _uniqueParticipants * (100 - i_commissionPercentage) / 100;
+        return
+            (i_poolPrice *
+                _uniqueParticipants *
+                (100 - i_commissionPercentage)) / 100;
     }
 
     function getCommissionClaimed() public view returns (bool) {

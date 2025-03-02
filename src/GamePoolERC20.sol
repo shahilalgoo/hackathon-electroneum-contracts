@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.19;
 
 import {BaseGamePool} from "./BaseGamePool.sol";
 import {IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -29,20 +29,34 @@ contract GamePoolERC20 is BaseGamePool {
         uint256 enrollStartTime_,
         uint256 playEndTime_
     )
-        BaseGamePool(canJoinPool_, poolPrice_,  commissionPercentage_, withdrawAddress_, enrollStartTime_, playEndTime_){
-            // Validate and set erc20 token address
-            AddressValidator.ERC20Check(erc20TokenAddress_);
-            i_tokenAddress = IERC20(erc20TokenAddress_);
-        }
+        BaseGamePool(
+            canJoinPool_,
+            poolPrice_,
+            commissionPercentage_,
+            withdrawAddress_,
+            enrollStartTime_,
+            playEndTime_
+        )
+    {
+        // Validate and set erc20 token address
+        AddressValidator.ERC20Check(erc20TokenAddress_);
+        i_tokenAddress = IERC20(erc20TokenAddress_);
+    }
 
     function _validateAmountPaid(uint256 amount) internal override {
         if (msg.value > 0) revert NativeTokenValueNotZero();
-        if (i_tokenAddress.balanceOf(msg.sender) < amount) revert TokenBalanceInsufficient();
-        if (i_tokenAddress.allowance(msg.sender, address(this)) < amount) revert TokenAllowanceInsufficient();
+        if (i_tokenAddress.balanceOf(msg.sender) < amount)
+            revert TokenBalanceInsufficient();
+        if (i_tokenAddress.allowance(msg.sender, address(this)) < amount)
+            revert TokenAllowanceInsufficient();
     }
 
     function _sendTokenOnJoinPool(uint256 amount) internal override {
-        bool success = i_tokenAddress.transferFrom(msg.sender, address(this), amount);
+        bool success = i_tokenAddress.transferFrom(
+            msg.sender,
+            address(this),
+            amount
+        );
         if (!success) revert TokenTransferFailed();
     }
 
@@ -51,13 +65,16 @@ contract GamePoolERC20 is BaseGamePool {
         if (!success) revert PrizeTransferFailed(msg.sender);
     }
 
-    function _sendRefund(uint256 refundAmount) internal override{
+    function _sendRefund(uint256 refundAmount) internal override {
         bool success = i_tokenAddress.transfer(msg.sender, refundAmount);
         if (!success) revert RefundTransferFailed(msg.sender);
     }
 
-    function _sendOwnerCommission(uint256 commissionAmount) internal override{
-        bool success = i_tokenAddress.transfer(_withdrawAddress, commissionAmount);
+    function _sendOwnerCommission(uint256 commissionAmount) internal override {
+        bool success = i_tokenAddress.transfer(
+            _withdrawAddress,
+            commissionAmount
+        );
         if (!success) revert CommissionTransferFailed();
     }
 

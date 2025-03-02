@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.19;
 
 import {BaseGamePool} from "./BaseGamePool.sol";
 
@@ -17,7 +17,15 @@ contract GamePoolNative is BaseGamePool {
         uint256 enrollStartTime_,
         uint256 playEndTime_
     )
-        BaseGamePool(canJoinPool_, poolPrice_,  commissionPercentage_, withdrawAddress_, enrollStartTime_, playEndTime_){}
+        BaseGamePool(
+            canJoinPool_,
+            poolPrice_,
+            commissionPercentage_,
+            withdrawAddress_,
+            enrollStartTime_,
+            playEndTime_
+        )
+    {}
 
     // No implementation needed for native token
     function _sendTokenOnJoinPool(uint256 amount) internal override {}
@@ -27,22 +35,22 @@ contract GamePoolNative is BaseGamePool {
     }
 
     function _sendPrize(uint256 amount) internal override {
-        (bool success,) = payable(msg.sender).call{value: amount}("");
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
         if (!success) revert PrizeTransferFailed(msg.sender);
     }
 
-    function _sendRefund(uint256 refundAmount) internal override{
-        (bool success,) = payable(msg.sender).call{value: refundAmount}("");
+    function _sendRefund(uint256 refundAmount) internal override {
+        (bool success, ) = payable(msg.sender).call{value: refundAmount}("");
         if (!success) revert RefundTransferFailed(msg.sender);
     }
 
-    function _sendOwnerCommission(uint256 commissionAmount) internal override{
-        (bool success,) = _withdrawAddress.call{value: commissionAmount}("");
+    function _sendOwnerCommission(uint256 commissionAmount) internal override {
+        (bool success, ) = _withdrawAddress.call{value: commissionAmount}("");
         if (!success) revert CommissionTransferFailed();
     }
 
     function _sendUnclaimedPrizes(uint256 balance) internal override {
-        (bool success,) = _withdrawAddress.call{value: balance}("");
+        (bool success, ) = _withdrawAddress.call{value: balance}("");
         if (!success) revert UnclaimedPrizesTransferFailed();
     }
 
